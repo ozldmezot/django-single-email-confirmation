@@ -10,6 +10,7 @@ from .signals import (
 
 
 from time import time
+from .exceptions import ConfirmationTokenDoesNotExistException
 from django.utils.crypto import get_random_string
 class EmailAddressManager(models.Manager):
 
@@ -17,26 +18,39 @@ class EmailAddressManager(models.Manager):
     def generate_key(self):
 
         # ensuring its gonna be unique over time
-        allowed_chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        t = int( time() )
-        stamp = ''
-        while t:
-            stamp += allowed_chars[t % 62]
-            t = int( t / 62 )
+        while True:
+            allowed_chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+            t = int( time() )
+            stamp = ''
+            while t:
+                stamp += allowed_chars[t % 62]
+                t = int( t / 62 )
 
-        return get_random_string(34) + str(stamp)
+            queryset = self.all()
+            key = get_random_string(34) + str(stamp)
+            email_address = queryset.filter(key=key, confirmed_at__isnull=True).first()
+            if not email_address:
+                break
+
+        return key
 
     def confirm(self, key):
         "Confirm an email address. Returns the address that was confirmed."
         queryset = self.all()
 
-        email_address = queryset.get(key=key)
+        email_address = queryset.filter(key=key, confirmed_at__isnull=True).first()
+
+        if not email_address:
+            raise ConfirmationTokenDoesNotExistException(key)
+
         email_address.confirmed_at = timezone.now()
         
         owner = email_address.owner
         owner.set_current_email(email_address.email)
         owner._single_email_confirmation_signal = email_confirmed
         owner.save()
+
+        return owner
 
 class EmailAddress(models.Model):
     "An email address belonging to a User"
