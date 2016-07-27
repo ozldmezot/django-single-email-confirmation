@@ -1,0 +1,3 @@
+/dist/*
+/django_single_email_confirmation.egg-info/*
+*.pyc
