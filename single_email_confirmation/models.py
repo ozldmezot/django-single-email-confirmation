@@ -28,7 +28,7 @@ class EmailAddressManager(models.Manager):
 
             queryset = self.all()
             key = get_random_string(34) + str(stamp)
-            email_address = queryset.filter(key=key, confirmed_at__isnull=True).first()
+            email_address = queryset.filter(key=key).first()
             if not email_address:
                 break
 
@@ -38,13 +38,13 @@ class EmailAddressManager(models.Manager):
         "Confirm an email address. Returns the address that was confirmed."
         queryset = self.all()
 
-        email_address = queryset.filter(key=key, confirmed_at__isnull=True).first()
+        email_address = queryset.filter(key=key).first()
 
         if not email_address:
             raise ConfirmationTokenDoesNotExistException(key)
 
         email_address.confirmed_at = timezone.now()
-        
+        email_address.key = None
         owner = email_address.owner
         owner.set_current_email(email_address.email)
         owner._single_email_confirmation_signal = email_confirmed
@@ -56,7 +56,7 @@ class EmailAddress(models.Model):
     "An email address belonging to a User"
 
     email = models.EmailField(max_length=255)
-    key = models.TextField(unique=True)
+    key = models.TextField(unique=True, blank=True, null=True)
 
     set_at = models.DateTimeField(
         default=timezone.now,
@@ -79,7 +79,6 @@ class EmailAddress(models.Model):
         self.set_at = timezone.now()
         if email:
             self.email=email
-        self.confirmed_at = None
 
 
 class EmailConfirmationMixin(models.Model):
@@ -106,7 +105,7 @@ class EmailConfirmationMixin(models.Model):
         email_address = self.email_address
         if not email_address:
             email_address = EmailAddress()
-        return email_address.email != self.email or email_address.is_confirmed
+        return email_address.is_confirmed
 
     def get_current_email(self):
         return getattr(self, self.email_field_name)
